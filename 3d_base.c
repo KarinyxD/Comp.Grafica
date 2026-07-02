@@ -8,483 +8,662 @@
 int win_id;
 GLUquadric *quad;
 
-/* ---- controle da animacao (danca "Stayin' Alive") ---- */
-int   animate    = 1;     /* liga/desliga animacao (tecla espaco) */
-float danceAngle = 0.0f;  /* angulo acumulado usado nas senoides  */
-float danceSpeed = 4.0f;  /* velocidade da danca (tecla +/-)      */
+/* ---- danca "Stayin' Alive" ---- */
+int   animate    = 1;
+float danceAngle = 0.0f;
+float danceSpeed = 4.0f;
+
+/* ---- casa do Patrick (pedra) ---- */
+float rockAngle   = 0.0f;   /* 0 = fechada, 85 = aberta */
+int   rockOpening = 0;
+int   rockClosing = 0;
 
 #define DEG2RAD(a) ((a) * 3.14159265f / 180.0f)
+#define PI 3.14159265f
 
 /* =====================================================================
-   Funcoes utilitárias de desenho (apenas primitivas/estruturas do OpenGL)
+   Primitivas auxiliares
    ===================================================================== */
 
-/* cilindro alinhado com o eixo Y, indo de y=0 até y=height */
+/* cilindro alinhado com +Y, de y=0 ate y=height (height pode ser negativo) */
 void drawCylinderY(float baseR, float topR, float height, int slices, int stacks)
 {
-  glPushMatrix();
+    glPushMatrix();
+    if (height < 0.0f) {
+        glRotatef(180.0f, 1.0f, 0.0f, 0.0f);
+        height = -height;
+    }
     glRotatef(-90.0f, 1.0f, 0.0f, 0.0f);
     gluCylinder(quad, baseR, topR, height, slices, stacks);
-  glPopMatrix();
+    glPopMatrix();
 }
 
-/* caixa simples usando glScalef + glutSolidCube */
+/* cilindro alinhado com +X */
+void drawCylinderX(float baseR, float topR, float length, int sl)
+{
+    glPushMatrix();
+    glRotatef(90.0f, 0.0f, 1.0f, 0.0f);
+    gluCylinder(quad, baseR, topR, length, sl, 1);
+    glPopMatrix();
+}
+
+/* cilindro alinhado com +Z */
+void drawCylinderZ(float baseR, float topR, float length, int sl)
+{
+    gluCylinder(quad, baseR, topR, length, sl, 1);
+}
+
 void drawBox(float sx, float sy, float sz)
 {
-  glPushMatrix();
+    glPushMatrix();
     glScalef(sx, sy, sz);
     glutSolidCube(1.0);
-  glPopMatrix();
+    glPopMatrix();
 }
 
-/* desenha um prisma em forma de estrela de 5 pontas (corpo do Patrick) */
-void drawStarPrism(float outerR, float innerR, float depth)
-{
-  int i;
-  float ang, ax[10], ay[10];
-
-  /* calcula os 10 vertices alternando raio externo/interno, ponta para cima */
-  for (i = 0; i < 10; i++) {
-    ang = DEG2RAD(90.0f - i * 36.0f);
-    float r = (i % 2 == 0) ? outerR : innerR;
-    ax[i] = r * cosf(ang);
-    ay[i] = r * sinf(ang);
-  }
-
-  /* face frontal */
-  glBegin(GL_TRIANGLE_FAN);
-    glNormal3f(0.0f, 0.0f, 1.0f);
-    glVertex3f(0.0f, 0.0f, depth/2.0f);
-    for (i = 0; i <= 10; i++)
-      glVertex3f(ax[i % 10], ay[i % 10], depth/2.0f);
-  glEnd();
-
-  /* face traseira */
-  glBegin(GL_TRIANGLE_FAN);
-    glNormal3f(0.0f, 0.0f, -1.0f);
-    glVertex3f(0.0f, 0.0f, -depth/2.0f);
-    for (i = 10; i >= 0; i--)
-      glVertex3f(ax[i % 10], ay[i % 10], -depth/2.0f);
-  glEnd();
-
-  /* laterais ligando as duas faces */
-  glBegin(GL_QUAD_STRIP);
-    for (i = 0; i <= 10; i++) {
-      int k = i % 10;
-      float nx = cosf(DEG2RAD(90.0f - k * 36.0f));
-      float ny = sinf(DEG2RAD(90.0f - k * 36.0f));
-      glNormal3f(nx, ny, 0.0f);
-      glVertex3f(ax[k], ay[k], depth/2.0f);
-      glVertex3f(ax[k], ay[k], -depth/2.0f);
-    }
-  glEnd();
-}
-
-/* olho simples: esfera branca + iris azul + pupila preta */
+/* olho: esfera branca + iris azul + pupila preta (projetados para frente) */
 void drawEye(float scale)
 {
-  glPushMatrix();
     glColor3f(1.0f, 1.0f, 1.0f);
-    glutSolidSphere(scale, 12, 12);
+    glutSolidSphere(scale, 14, 14);
     glPushMatrix();
-      glTranslatef(0.0f, 0.0f, scale * 0.7f);
-      glColor3f(0.1f, 0.4f, 0.9f);
-      glutSolidSphere(scale * 0.55f, 10, 10);
-      glTranslatef(0.0f, 0.0f, scale * 0.35f);
-      glColor3f(0.0f, 0.0f, 0.0f);
-      glutSolidSphere(scale * 0.28f, 8, 8);
+        glTranslatef(0.0f, 0.0f, scale * 0.68f);
+        glColor3f(0.1f, 0.45f, 0.9f);
+        glutSolidSphere(scale * 0.58f, 12, 12);
+        glTranslatef(0.0f, 0.0f, scale * 0.38f);
+        glColor3f(0.0f, 0.0f, 0.0f);
+        glutSolidSphere(scale * 0.30f, 10, 10);
     glPopMatrix();
-  glPopMatrix();
-}
-
-/* =====================================================================
-   Cenario de fundo: predio simples (Balde de Gelo / Krusty Krab estilizado)
-   ===================================================================== */
-void drawBuilding(float x, float y, float z)
-{
-  glPushMatrix();
-    glTranslatef(x, y, z);
-
-    /* corpo do predio */
-    glColor3f(0.55f, 0.27f, 0.07f);
-    glPushMatrix();
-      glTranslatef(0.0f, 8.0f, 0.0f);
-      drawBox(18.0f, 16.0f, 12.0f);
-    glPopMatrix();
-
-    /* telhado em forma de piramide */
-    glColor3f(0.6f, 0.05f, 0.05f);
-    glPushMatrix();
-      glTranslatef(0.0f, 16.0f, 0.0f);
-      glBegin(GL_TRIANGLES);
-        /* frente */
-        glNormal3f(0,0.4f,1);
-        glVertex3f(-9.0f, 0.0f,  6.0f);
-        glVertex3f( 9.0f, 0.0f,  6.0f);
-        glVertex3f( 0.0f, 5.0f,  0.0f);
-        /* tras */
-        glNormal3f(0,0.4f,-1);
-        glVertex3f( 9.0f, 0.0f, -6.0f);
-        glVertex3f(-9.0f, 0.0f, -6.0f);
-        glVertex3f( 0.0f, 5.0f,  0.0f);
-        /* esquerda */
-        glNormal3f(-1,0.4f,0);
-        glVertex3f(-9.0f, 0.0f, -6.0f);
-        glVertex3f(-9.0f, 0.0f,  6.0f);
-        glVertex3f( 0.0f, 5.0f,  0.0f);
-        /* direita */
-        glNormal3f(1,0.4f,0);
-        glVertex3f( 9.0f, 0.0f,  6.0f);
-        glVertex3f( 9.0f, 0.0f, -6.0f);
-        glVertex3f( 0.0f, 5.0f,  0.0f);
-      glEnd();
-    glPopMatrix();
-
-    /* porta */
-    glColor3f(0.3f, 0.15f, 0.05f);
-    glPushMatrix();
-      glTranslatef(0.0f, 3.0f, 6.05f);
-      drawBox(3.0f, 6.0f, 0.2f);
-    glPopMatrix();
-
-    /* janelas */
-    glColor3f(0.6f, 0.9f, 1.0f);
-    glPushMatrix();
-      glTranslatef(-6.0f, 10.0f, 6.05f);
-      drawBox(2.5f, 2.5f, 0.2f);
-    glPopMatrix();
-    glPushMatrix();
-      glTranslatef(6.0f, 10.0f, 6.05f);
-      drawBox(2.5f, 2.5f, 0.2f);
-    glPopMatrix();
-
-  glPopMatrix();
-}
-
-void drawGround(void)
-{
-  glColor3f(0.85f, 0.78f, 0.35f); /* areia */
-  glBegin(GL_QUADS);
-    glNormal3f(0.0f, 1.0f, 0.0f);
-    glVertex3f(-60.0f, 0.0f, -40.0f);
-    glVertex3f( 60.0f, 0.0f, -40.0f);
-    glVertex3f( 60.0f, 0.0f,  40.0f);
-    glVertex3f(-60.0f, 0.0f,  40.0f);
-  glEnd();
 }
 
 /* =====================================================================
    Bob Esponja
    ===================================================================== */
+
+void drawBobArm(float side, float phase)
+{
+    float swing = 40.0f * sinf(DEG2RAD(danceAngle + phase));
+    glPushMatrix();
+        glTranslatef(side * 2.1f, 5.9f, 0.0f);
+        glRotatef(side * 22.0f, 0.0f, 0.0f, 1.0f);   /* abre para o lado */
+        glRotatef(side * swing, 1.0f, 0.0f, 0.0f);    /* balanca frente/tras */
+        /* braco fino amarelo */
+        glColor3f(1.0f, 0.88f, 0.1f);
+        drawCylinderY(0.22f, 0.18f, -3.8f, 10, 4);
+        /* mao como esfera pequena */
+        glTranslatef(0.0f, -3.8f, 0.0f);
+        glutSolidSphere(0.28f, 10, 10);
+    glPopMatrix();
+}
+
+void drawBobLeg(float side, float phase)
+{
+    float legSwing = side * 22.0f * sinf(DEG2RAD(danceAngle + phase));
+    glPushMatrix();
+        glTranslatef(side * 0.9f, 1.05f, 0.0f);
+        glRotatef(legSwing, 1.0f, 0.0f, 0.0f);
+        /* perna fina amarela */
+        glColor3f(1.0f, 0.88f, 0.1f);
+        drawCylinderY(0.28f, 0.26f, -2.8f, 10, 4);
+        glTranslatef(0.0f, -2.8f, 0.0f);
+        /* meia branca */
+        glColor3f(1.0f, 1.0f, 1.0f);
+        drawCylinderY(0.30f, 0.30f, -0.75f, 10, 4);
+        /* listras da meia (cinza) */
+        glColor3f(0.72f, 0.72f, 0.72f);
+        glPushMatrix();
+            glTranslatef(0.0f, -0.25f, 0.0f);
+            drawCylinderY(0.31f, 0.31f, -0.08f, 10, 2);
+        glPopMatrix();
+        glPushMatrix();
+            glTranslatef(0.0f, -0.45f, 0.0f);
+            drawCylinderY(0.31f, 0.31f, -0.08f, 10, 2);
+        glPopMatrix();
+        /* sapato preto (largo, oval) */
+        glTranslatef(0.0f, -0.75f, 0.0f);
+        glColor3f(0.05f, 0.05f, 0.05f);
+        glPushMatrix();
+            glTranslatef(0.0f, -0.28f, 0.45f);
+            glScalef(1.4f, 0.55f, 2.0f);
+            glutSolidSphere(0.65f, 12, 8);   /* sapato ovalado */
+        glPopMatrix();
+    glPopMatrix();
+}
+
 void drawBobEsponja(float x, float y, float z, float phase)
 {
-  float swing = 35.0f * sinf(DEG2RAD(danceAngle + phase)); /* danca dos bracos */
-  float legSwing = -20.0f * sinf(DEG2RAD(danceAngle + phase));
-  float bob = 0.4f * sinf(DEG2RAD(2.0f * (danceAngle + phase)));
+    float bob = 0.35f * sinf(DEG2RAD(2.0f * (danceAngle + phase)));
 
-  glPushMatrix();
-    glTranslatef(x, y + bob, z);
-
-    /* corpo amarelo (esponja) */
-    glColor3f(1.0f, 0.9f, 0.1f);
     glPushMatrix();
-      glTranslatef(0.0f, 4.5f, 0.0f);
-      drawBox(4.0f, 5.0f, 2.5f);
-    glPopMatrix();
+        glTranslatef(x, y + bob, z);
 
-    /* furos da esponja (pequenas esferas marrom-claras) */
-    glColor3f(0.85f, 0.7f, 0.05f);
-    glPushMatrix();
-      glTranslatef(-1.0f, 5.5f, 1.3f);
-      glutSolidSphere(0.25f, 8, 8);
-      glTranslatef(1.6f, -1.0f, 0.0f);
-      glutSolidSphere(0.2f, 8, 8);
-      glTranslatef(-0.8f, -1.6f, 0.0f);
-      glutSolidSphere(0.22f, 8, 8);
-    glPopMatrix();
+        /* --- corpo amarelo (esponja quadrada) --- */
+        glColor3f(1.0f, 0.88f, 0.1f);
+        glPushMatrix();
+            glTranslatef(0.0f, 4.5f, 0.0f);
+            drawBox(4.0f, 5.0f, 2.5f);
+        glPopMatrix();
 
-    /* olhos */
-    glPushMatrix();
-      glTranslatef(-0.9f, 6.0f, 1.3f);
-      drawEye(0.75f);
-    glPopMatrix();
-    glPushMatrix();
-      glTranslatef(0.9f, 6.0f, 1.3f);
-      drawEye(0.75f);
-    glPopMatrix();
+        /* furos da esponja */
+        glColor3f(0.88f, 0.72f, 0.05f);
+        float hx[] = {-1.2f, 0.5f, -0.5f, 1.1f, -1.0f, 0.8f};
+        float hy[] = {6.8f,  6.3f, 5.2f,  5.6f, 4.2f, 4.8f};
+        float hr[] = {0.22f, 0.18f, 0.25f, 0.2f, 0.2f, 0.23f};
+        for (int i = 0; i < 6; i++) {
+            glPushMatrix();
+                glTranslatef(hx[i], hy[i], 1.26f);
+                glutSolidSphere(hr[i], 8, 8);
+            glPopMatrix();
+        }
 
-    /* nariz */
-    glColor3f(0.9f, 0.7f, 0.2f);
-    glPushMatrix();
-      glTranslatef(0.0f, 4.9f, 1.5f);
-      glutSolidSphere(0.35f, 10, 10);
-    glPopMatrix();
+        /* --- olhos --- */
+        glPushMatrix();
+            glTranslatef(-0.85f, 6.05f, 1.32f);
+            drawEye(0.72f);
+        glPopMatrix();
+        glPushMatrix();
+            glTranslatef(0.85f, 6.05f, 1.32f);
+            drawEye(0.72f);
+        glPopMatrix();
 
-    /* boca */
-    glColor3f(0.0f, 0.0f, 0.0f);
-    glPushMatrix();
-      glTranslatef(0.0f, 3.7f, 1.35f);
-      drawBox(2.0f, 0.25f, 0.2f);
-    glPopMatrix();
+        /* cílios (3 por olho, finos) */
+        glColor3f(0.0f, 0.0f, 0.0f);
+        float cilX[] = {-1.4f, -0.85f, -0.3f};
+        for (int i = 0; i < 3; i++) {
+            glPushMatrix();
+                glTranslatef(cilX[i], 6.95f, 1.32f);
+                glRotatef(-15.0f + i*15.0f, 0.0f, 0.0f, 1.0f);
+                drawCylinderY(0.04f, 0.02f, 0.45f, 6, 2);
+            glPopMatrix();
+            glPushMatrix();
+                glTranslatef(-cilX[i], 6.95f, 1.32f);
+                glRotatef(15.0f - i*15.0f, 0.0f, 0.0f, 1.0f);
+                drawCylinderY(0.04f, 0.02f, 0.45f, 6, 2);
+            glPopMatrix();
+        }
 
-    /* braco esquerdo (gira no ombro) */
-    glColor3f(1.0f, 0.9f, 0.1f);
-    glPushMatrix();
-      glTranslatef(-2.0f, 6.0f, 0.0f);
-      glRotatef(swing, 1.0f, 0.0f, 0.0f);
-      glRotatef(20.0f, 0.0f, 0.0f, 1.0f);
-      drawCylinderY(0.35f, 0.3f, -3.0f, 10, 4);
-    glPopMatrix();
+        /* --- nariz --- */
+        glColor3f(0.95f, 0.72f, 0.18f);
+        glPushMatrix();
+            glTranslatef(0.0f, 5.0f, 1.55f);
+            glutSolidSphere(0.38f, 10, 10);
+        glPopMatrix();
 
-    /* braco direito (movimento oposto) */
-    glPushMatrix();
-      glTranslatef(2.0f, 6.0f, 0.0f);
-      glRotatef(-swing, 1.0f, 0.0f, 0.0f);
-      glRotatef(-20.0f, 0.0f, 0.0f, 1.0f);
-      drawCylinderY(0.35f, 0.3f, -3.0f, 10, 4);
-    glPopMatrix();
+        /* --- boca (curva simulada com 3 boxes em arco) --- */
+        glColor3f(0.85f, 0.55f, 0.05f);  /* interior boca */
+        glPushMatrix();
+            glTranslatef(0.0f, 3.75f, 1.32f);
+            drawBox(1.9f, 0.55f, 0.15f);
+        glPopMatrix();
+        /* dentes */
+        glColor3f(1.0f, 1.0f, 1.0f);
+        glPushMatrix();
+            glTranslatef(-0.35f, 3.85f, 1.36f);
+            drawBox(0.4f, 0.45f, 0.12f);
+        glPopMatrix();
+        glPushMatrix();
+            glTranslatef(0.35f, 3.85f, 1.36f);
+            drawBox(0.4f, 0.45f, 0.12f);
+        glPopMatrix();
 
-    /* calca marrom */
-    glColor3f(0.45f, 0.25f, 0.05f);
-    glPushMatrix();
-      glTranslatef(0.0f, 1.7f, 0.0f);
-      drawBox(4.2f, 1.2f, 2.6f);
-    glPopMatrix();
+        /* --- gravata vermelha --- */
+        glColor3f(0.85f, 0.05f, 0.05f);
+        glPushMatrix();
+            glTranslatef(0.0f, 5.5f, 1.28f);
+            glRotatef(5.0f, 0.0f, 0.0f, 1.0f);
+            drawBox(0.3f, 1.2f, 0.1f);
+            /* ponta da gravata */
+            glTranslatef(0.05f, -0.85f, 0.0f);
+            glBegin(GL_TRIANGLES);
+                glNormal3f(0,0,1);
+                glVertex3f(-0.25f, 0.0f, 0.0f);
+                glVertex3f( 0.25f, 0.0f, 0.0f);
+                glVertex3f( 0.05f,-0.35f, 0.0f);
+            glEnd();
+        glPopMatrix();
 
-    /* perna esquerda */
-    glColor3f(1.0f, 0.9f, 0.1f);
-    glPushMatrix();
-      glTranslatef(-1.0f, 1.1f, 0.0f);
-      glRotatef(legSwing, 1.0f, 0.0f, 0.0f);
-      drawCylinderY(0.4f, 0.4f, -1.8f, 10, 4);
-      glTranslatef(0.0f, -1.8f, 0.0f);
-      glColor3f(0.05f, 0.05f, 0.05f);
-      drawBox(1.0f, 0.5f, 1.4f);
-    glPopMatrix();
+        /* --- calca marrom quadrada --- */
+        glColor3f(0.42f, 0.22f, 0.04f);
+        glPushMatrix();
+            glTranslatef(0.0f, 1.7f, 0.0f);
+            drawBox(4.2f, 1.3f, 2.6f);
+        glPopMatrix();
+        /* cinto preto */
+        glColor3f(0.1f, 0.1f, 0.1f);
+        glPushMatrix();
+            glTranslatef(0.0f, 2.36f, 0.0f);
+            drawBox(4.22f, 0.22f, 2.62f);
+        glPopMatrix();
+        /* fivela do cinto */
+        glColor3f(0.7f, 0.65f, 0.1f);
+        glPushMatrix();
+            glTranslatef(0.0f, 2.36f, 1.32f);
+            drawBox(0.55f, 0.3f, 0.12f);
+        glPopMatrix();
 
-    /* perna direita (oposta) */
-    glPushMatrix();
-      glTranslatef(1.0f, 1.1f, 0.0f);
-      glColor3f(1.0f, 0.9f, 0.1f);
-      glRotatef(-legSwing, 1.0f, 0.0f, 0.0f);
-      drawCylinderY(0.4f, 0.4f, -1.8f, 10, 4);
-      glTranslatef(0.0f, -1.8f, 0.0f);
-      glColor3f(0.05f, 0.05f, 0.05f);
-      drawBox(1.0f, 0.5f, 1.4f);
-    glPopMatrix();
+        /* --- bracos e pernas animados --- */
+        drawBobArm(-1.0f, phase);
+        drawBobArm( 1.0f, phase + 180.0f);
+        drawBobLeg(-1.0f, phase);
+        drawBobLeg( 1.0f, phase + 180.0f);
 
-  glPopMatrix();
+    glPopMatrix();
 }
 
 /* =====================================================================
    Patrick Estrela
    ===================================================================== */
+
+/* preenche a estrela em z fixo como triangle fan */
+void starFace(float outerR, float innerR, float z, int frontFace)
+{
+    float ax[10], ay[10];
+    for (int i = 0; i < 10; i++) {
+        float ang = DEG2RAD(90.0f - i * 36.0f);
+        float r   = (i % 2 == 0) ? outerR : innerR;
+        ax[i] = r * cosf(ang);
+        ay[i] = r * sinf(ang);
+    }
+    glNormal3f(0.0f, 0.0f, frontFace ? 1.0f : -1.0f);
+    glBegin(GL_TRIANGLE_FAN);
+        glVertex3f(0.0f, 0.0f, z);
+        if (frontFace)
+            for (int i = 0; i <= 10; i++) glVertex3f(ax[i%10], ay[i%10], z);
+        else
+            for (int i = 10; i >= 0; i--) glVertex3f(ax[i%10], ay[i%10], z);
+    glEnd();
+}
+
+void drawStarPrism(float outerR, float innerR, float depth)
+{
+    float ax[10], ay[10];
+    for (int i = 0; i < 10; i++) {
+        float ang = DEG2RAD(90.0f - i * 36.0f);
+        float r   = (i % 2 == 0) ? outerR : innerR;
+        ax[i] = r * cosf(ang);
+        ay[i] = r * sinf(ang);
+    }
+    starFace(outerR, innerR,  depth/2.0f, 1);
+    starFace(outerR, innerR, -depth/2.0f, 0);
+    /* laterais */
+    glBegin(GL_QUAD_STRIP);
+        for (int i = 0; i <= 10; i++) {
+            int k  = i % 10;
+            int kp = (i+1) % 10;
+            float nx = (ax[k] + ax[kp]) * 0.5f;
+            float ny = (ay[k] + ay[kp]) * 0.5f;
+            float len = sqrtf(nx*nx + ny*ny);
+            if (len > 0.001f) { nx /= len; ny /= len; }
+            glNormal3f(nx, ny, 0.0f);
+            glVertex3f(ax[k], ay[k],  depth/2.0f);
+            glVertex3f(ax[k], ay[k], -depth/2.0f);
+        }
+    glEnd();
+    /* esferas nos extremos para arredondar as pontas */
+    for (int i = 0; i < 10; i += 2) {
+        glPushMatrix();
+            glTranslatef(ax[i], ay[i], 0.0f);
+            glutSolidSphere(0.85f, 12, 12);
+        glPopMatrix();
+    }
+}
+
+void drawPatrickArm(float side, float phase)
+{
+    float swing = 40.0f * sinf(DEG2RAD(danceAngle + phase));
+    glPushMatrix();
+        glTranslatef(side * 3.1f, 4.4f, 0.0f);
+        glRotatef(side * 30.0f, 0.0f, 0.0f, 1.0f);
+        glRotatef(side * swing, 1.0f, 0.0f, 0.0f);
+        glColor3f(1.0f, 0.55f, 0.6f);
+        drawCylinderY(0.35f, 0.28f, -2.8f, 10, 4);
+        glTranslatef(0.0f, -2.8f, 0.0f);
+        glutSolidSphere(0.35f, 10, 10);
+    glPopMatrix();
+}
+
+void drawPatrickLeg(float side, float phase)
+{
+    float legSwing = side * 22.0f * sinf(DEG2RAD(danceAngle + phase));
+    glPushMatrix();
+        glTranslatef(side * 1.3f, 1.5f, 0.0f);
+        glRotatef(legSwing, 1.0f, 0.0f, 0.0f);
+        glColor3f(1.0f, 0.55f, 0.6f);
+        drawCylinderY(0.38f, 0.35f, -2.0f, 10, 4);
+        glTranslatef(0.0f, -2.0f, 0.0f);
+        glColor3f(0.05f, 0.05f, 0.05f);
+        glPushMatrix();
+            glTranslatef(0.0f, -0.25f, 0.4f);
+            glScalef(1.3f, 0.5f, 1.9f);
+            glutSolidSphere(0.65f, 12, 8);
+        glPopMatrix();
+    glPopMatrix();
+}
+
 void drawPatrick(float x, float y, float z, float phase)
 {
-  float swing = 35.0f * sinf(DEG2RAD(danceAngle + phase));
-  float legSwing = -20.0f * sinf(DEG2RAD(danceAngle + phase));
-  float bob = 0.4f * sinf(DEG2RAD(2.0f * (danceAngle + phase)));
+    float bob = 0.35f * sinf(DEG2RAD(2.0f * (danceAngle + phase)));
 
-  glPushMatrix();
-    glTranslatef(x, y + bob, z);
-
-    /* corpo em forma de estrela */
-    glColor3f(1.0f, 0.55f, 0.6f);
     glPushMatrix();
-      glTranslatef(0.0f, 4.0f, 0.0f);
-      drawStarPrism(3.5f, 1.5f, 2.0f);
-    glPopMatrix();
+        glTranslatef(x, y + bob, z);
 
-    /* olhos */
-    glPushMatrix();
-      glTranslatef(-0.8f, 4.6f, 1.05f);
-      drawEye(0.6f);
-    glPopMatrix();
-    glPushMatrix();
-      glTranslatef(0.8f, 4.6f, 1.05f);
-      drawEye(0.6f);
-    glPopMatrix();
+        /* corpo estrela rosa */
+        glColor3f(1.0f, 0.55f, 0.6f);
+        glPushMatrix();
+            glTranslatef(0.0f, 4.2f, 0.0f);
+            drawStarPrism(3.4f, 1.9f, 2.2f);
+        glPopMatrix();
 
-    /* boca */
-    glColor3f(0.5f, 0.05f, 0.05f);
-    glPushMatrix();
-      glTranslatef(0.0f, 3.6f, 1.05f);
-      glRotatef(90.0f, 0.0f, 0.0f, 1.0f);
-      drawBox(0.5f, 1.6f, 0.2f);
-    glPopMatrix();
+        /* calcinha verde com listras roxas (Patrick usa na barriga) */
+        glColor3f(0.15f, 0.55f, 0.2f);
+        glPushMatrix();
+            glTranslatef(0.0f, 2.5f, 1.12f);
+            drawBox(2.4f, 1.0f, 0.15f);
+        glPopMatrix();
+        glColor3f(0.55f, 0.1f, 0.7f);
+        for (int i = -1; i <= 1; i++) {
+            glPushMatrix();
+                glTranslatef(i * 0.7f, 2.5f, 1.16f);
+                drawBox(0.18f, 1.05f, 0.1f);
+            glPopMatrix();
+        }
 
-    /* braco esquerdo saindo da ponta lateral da estrela */
-    glColor3f(1.0f, 0.55f, 0.6f);
-    glPushMatrix();
-      glTranslatef(-3.3f, 4.2f, 0.0f);
-      glRotatef(swing, 1.0f, 0.0f, 0.0f);
-      glRotatef(25.0f, 0.0f, 0.0f, 1.0f);
-      drawCylinderY(0.35f, 0.3f, -2.5f, 10, 4);
-    glPopMatrix();
+        /* olhos */
+        glPushMatrix();
+            glTranslatef(-0.75f, 4.75f, 1.12f);
+            drawEye(0.58f);
+        glPopMatrix();
+        glPushMatrix();
+            glTranslatef(0.75f, 4.75f, 1.12f);
+            drawEye(0.58f);
+        glPopMatrix();
 
-    /* braco direito */
-    glPushMatrix();
-      glTranslatef(3.3f, 4.2f, 0.0f);
-      glRotatef(-swing, 1.0f, 0.0f, 0.0f);
-      glRotatef(-25.0f, 0.0f, 0.0f, 1.0f);
-      drawCylinderY(0.35f, 0.3f, -2.5f, 10, 4);
-    glPopMatrix();
+        /* boca */
+        glColor3f(0.0f, 0.0f, 0.0f);
+        glPushMatrix();
+            glTranslatef(0.0f, 3.85f, 1.12f);
+            drawBox(1.3f, 0.2f, 0.12f);
+        glPopMatrix();
 
-    /* perna esquerda saindo da ponta inferior */
-    glPushMatrix();
-      glTranslatef(-1.1f, 1.6f, 0.0f);
-      glRotatef(legSwing, 1.0f, 0.0f, 0.0f);
-      drawCylinderY(0.4f, 0.4f, -1.6f, 10, 4);
-    glPopMatrix();
+        /* bracos e pernas */
+        drawPatrickArm(-1.0f, phase);
+        drawPatrickArm( 1.0f, phase + 180.0f);
+        drawPatrickLeg(-1.0f, phase);
+        drawPatrickLeg( 1.0f, phase + 180.0f);
 
-    /* perna direita */
-    glPushMatrix();
-      glTranslatef(1.1f, 1.6f, 0.0f);
-      glRotatef(-legSwing, 1.0f, 0.0f, 0.0f);
-      drawCylinderY(0.4f, 0.4f, -1.6f, 10, 4);
     glPopMatrix();
+}
 
-  glPopMatrix();
+/* =====================================================================
+   Casa do Patrick: pedra escura com enfeite dourado no topo
+   Tecla O = abrir, tecla F = fechar
+   ===================================================================== */
+
+/* galho dourado recursivo (enfeite no topo da pedra) */
+void drawBranch(float len, int depth, float angleZ)
+{
+    if (depth == 0 || len < 0.05f) return;
+    glColor3f(0.82f, 0.68f, 0.1f);
+    glPushMatrix();
+        glRotatef(angleZ, 0.0f, 0.0f, 1.0f);
+        drawCylinderY(0.08f * len, 0.05f * len, len, 8, 2);
+        glTranslatef(0.0f, len, 0.0f);
+        drawBranch(len * 0.55f, depth-1,  38.0f);
+        drawBranch(len * 0.55f, depth-1, -38.0f);
+        drawBranch(len * 0.48f, depth-1,   8.0f);
+    glPopMatrix();
+}
+
+void drawPatrickHouse(float x, float y, float z)
+{
+    float R = 7.5f;   /* raio da cúpula */
+    float hingeZ = z - R * 0.85f;   /* eixo de dobradiça no fundo da pedra */
+
+    glPushMatrix();
+        glTranslatef(x, y, 0.0f);
+
+        /* base de pedra (pequena) */
+        glColor3f(0.22f, 0.18f, 0.18f);
+        glPushMatrix();
+            glTranslatef(0.0f, 0.4f, z);
+            glScalef(5.5f, 0.8f, 5.5f);
+            glutSolidSphere(1.0f, 16, 8);
+        glPopMatrix();
+
+        /* pedra / cupula – rotaciona em torno da dobradica no fundo */
+        glTranslatef(0.0f, 0.0f, hingeZ);      /* move hinge para origem */
+        glRotatef(-rockAngle, 1.0f, 0.0f, 0.0f); /* abre girando para tras */
+        glTranslatef(0.0f, 0.0f, -hingeZ);     /* volta */
+
+        /* interior visivel quando aberto */
+        glColor3f(0.18f, 0.08f, 0.08f);
+        glPushMatrix();
+            glTranslatef(0.0f, 0.2f, z);
+            glScalef(1.0f, 0.05f, 1.0f);
+            glutSolidSphere(R * 0.92f, 20, 4);
+        glPopMatrix();
+
+        /* cúpula exterior escura (marrom muito escuro) */
+        glColor3f(0.23f, 0.07f, 0.09f);
+        glPushMatrix();
+            glTranslatef(0.0f, 0.0f, z);
+            glScalef(1.0f, 0.65f, 0.92f);
+            /* hemisferio superior usando meia esfera */
+            glPushMatrix();
+                glRotatef(-90.0f, 1.0f, 0.0f, 0.0f);
+                /* gluSphere completa mas cortamos a parte de baixo via clip */
+                GLdouble eq[4] = {0, -1, 0, 0};
+                glClipPlane(GL_CLIP_PLANE0, eq);
+                glEnable(GL_CLIP_PLANE0);
+                glutSolidSphere(R, 28, 16);
+                glDisable(GL_CLIP_PLANE0);
+            glPopMatrix();
+        glPopMatrix();
+
+        /* enfeite dourado no topo da pedra */
+        glPushMatrix();
+            glTranslatef(0.0f, R * 0.65f - 0.3f, z);
+            /* haste vertical */
+            glColor3f(0.82f, 0.68f, 0.1f);
+            drawCylinderY(0.1f, 0.08f, 1.8f, 8, 2);
+            glTranslatef(0.0f, 1.8f, 0.0f);
+            /* barra horizontal */
+            glPushMatrix();
+                glTranslatef(-1.0f, 0.0f, 0.0f);
+                drawCylinderX(0.07f, 0.07f, 2.0f, 8);
+            glPopMatrix();
+            /* galhos a partir da barra */
+            glPushMatrix();
+                glTranslatef(-0.8f, 0.0f, 0.0f);
+                drawBranch(0.55f, 2, 0.0f);
+            glPopMatrix();
+            glPushMatrix();
+                glTranslatef(0.8f, 0.0f, 0.0f);
+                drawBranch(0.55f, 2, 0.0f);
+            glPopMatrix();
+        glPopMatrix();
+
+    glPopMatrix();
+}
+
+/* =====================================================================
+   Cenario
+   ===================================================================== */
+void drawGround(void)
+{
+    glColor3f(0.85f, 0.78f, 0.35f);
+    glBegin(GL_QUADS);
+        glNormal3f(0.0f, 1.0f, 0.0f);
+        glVertex3f(-80.0f, 0.0f, -50.0f);
+        glVertex3f( 80.0f, 0.0f, -50.0f);
+        glVertex3f( 80.0f, 0.0f,  40.0f);
+        glVertex3f(-80.0f, 0.0f,  40.0f);
+    glEnd();
+    /* algumas pedrinhas no chao */
+    glColor3f(0.6f, 0.55f, 0.3f);
+    float px[] = {-15.0f, 12.0f, -5.0f, 20.0f, -22.0f};
+    float pz[] = {  2.0f,  3.5f, -8.0f,  1.0f,   6.0f};
+    for (int i = 0; i < 5; i++) {
+        glPushMatrix();
+            glTranslatef(px[i], 0.15f, pz[i]);
+            glScalef(1.0f, 0.3f, 0.8f);
+            glutSolidSphere(0.6f, 8, 6);
+        glPopMatrix();
+    }
 }
 
 /* =====================================================================
    Callbacks
    ===================================================================== */
-
 void myKeyboard(unsigned char key, int x, int y)
 {
-  switch (key) {
-    case 'R':
-    case 'r':
-      glColor3f(1.0f, 0.0f, 0.0f);
-      break;
-    case 'G':
-    case 'g':
-      glColor3f(0.0f, 1.0f, 0.0f);
-      break;
-    case 'B':
-    case 'b':
-      glColor3f(0.0f, 0.0f, 1.0f);
-      break;
-    case ' ': /* liga/desliga a danca */
-      animate = !animate;
-      break;
-    case '+': /* aumenta velocidade da danca */
-      danceSpeed += 1.0f;
-      break;
-    case '-': /* diminui velocidade da danca */
-      if (danceSpeed > 1.0f) danceSpeed -= 1.0f;
-      break;
-  }
-  glutPostRedisplay();
+    switch (key) {
+        case ' ':
+            animate = !animate;
+            printf("Animacao: %s\n", animate ? "ligada" : "desligada");
+            break;
+        case '+':
+            danceSpeed += 1.0f;
+            break;
+        case '-':
+            if (danceSpeed > 1.0f) danceSpeed -= 1.0f;
+            break;
+        /* abertura/fechamento da pedra do Patrick */
+        case 'o': case 'O':
+            rockOpening = 1;
+            rockClosing = 0;
+            printf("Abrindo a casa do Patrick...\n");
+            break;
+        case 'f': case 'F':
+            rockClosing = 1;
+            rockOpening = 0;
+            printf("Fechando a casa do Patrick...\n");
+            break;
+        case 'R': case 'r': glColor3f(1,0,0); break;
+        case 'G': case 'g': glColor3f(0,1,0); break;
+        case 'B': case 'b': glColor3f(0,0,1); break;
+    }
+    glutPostRedisplay();
 }
 
-void myKeyboardSpecial(int key, int x, int y) {
-  switch (key) {
-    case GLUT_KEY_UP:
-      glutFullScreen();
-      break;
-    case GLUT_KEY_DOWN:
-      glutReshapeWindow(640, 480);
-      break;
-    default:
-      printf("Você apertou a tecla especial código: %d\n", key);
-      break;
-  }
+void myKeyboardSpecial(int key, int x, int y)
+{
+    switch (key) {
+        case GLUT_KEY_UP:
+            glutFullScreen();
+            break;
+        case GLUT_KEY_DOWN:
+            glutReshapeWindow(800, 600);
+            break;
+        default:
+            printf("Tecla especial: %d\n", key);
+            break;
+    }
 }
 
 void myMouse(int button, int state, int x, int y)
 {
-  if (button == GLUT_LEFT_BUTTON)
-    if (state == GLUT_DOWN) {
-      float r, g, b;
-      r = (double)rand() / (double)RAND_MAX;
-      g = (double)rand() / (double)RAND_MAX;
-      b = (double)rand() / (double)RAND_MAX;
-      glColor3f(r,g,b);
-      printf("%.2f, %.2f, %.2f, na posicao %d, %d\n", r, g, b, x, y);
+    if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
+        float r = (float)rand()/RAND_MAX;
+        float g = (float)rand()/RAND_MAX;
+        float b = (float)rand()/RAND_MAX;
+        glColor3f(r,g,b);
     }
-  glutPostRedisplay();
+    glutPostRedisplay();
 }
 
-/* timer que avanca a animacao da danca */
 void myTimer(int value)
 {
-  if (animate) {
-    danceAngle += danceSpeed;
-    if (danceAngle > 36000.0f) danceAngle -= 36000.0f;
-  }
-  glutPostRedisplay();
-  glutTimerFunc(30, myTimer, 0);
+    if (animate) {
+        danceAngle += danceSpeed;
+        if (danceAngle > 36000.0f) danceAngle -= 36000.0f;
+    }
+    /* anima abertura/fechamento da pedra */
+    if (rockOpening && rockAngle < 85.0f) {
+        rockAngle += 2.5f;
+        if (rockAngle > 85.0f) rockAngle = 85.0f;
+    }
+    if (rockClosing && rockAngle > 0.0f) {
+        rockAngle -= 2.5f;
+        if (rockAngle < 0.0f) rockAngle = 0.0f;
+    }
+    glutPostRedisplay();
+    glutTimerFunc(30, myTimer, 0);
 }
 
 void init(void)
 {
-  /* ceu/mar ao fundo */
-  glClearColor(0.45f, 0.75f, 0.95f, 0.0f);
-  glShadeModel(GL_SMOOTH);
-  glEnable(GL_COLOR_MATERIAL);
-  glEnable(GL_NORMALIZE);
+    glClearColor(0.42f, 0.72f, 0.92f, 0.0f);  /* azul claro (fundo do mar) */
+    glShadeModel(GL_SMOOTH);
+    glEnable(GL_COLOR_MATERIAL);
+    glEnable(GL_NORMALIZE);
 
-  GLfloat light_ambient[]  = { 0.3, 0.3, 0.3, 1.0 };
-  GLfloat light_diffuse[]  = { 1.0, 1.0, 1.0, 1.0 };
-  GLfloat light_specular[] = { 1.0, 1.0, 1.0, 1.0 };
-  GLfloat light_position[] = { 10.0, 30.0, 30.0, 0.0 };
+    GLfloat light_ambient[]  = { 0.35f, 0.35f, 0.35f, 1.0f };
+    GLfloat light_diffuse[]  = { 1.0f,  1.0f,  1.0f,  1.0f };
+    GLfloat light_specular[] = { 0.6f,  0.6f,  0.6f,  1.0f };
+    GLfloat light_position[] = { 15.0f, 30.0f, 30.0f, 0.0f };
 
-  glLightfv(GL_LIGHT0, GL_AMBIENT, light_ambient);
-  glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
-  glLightfv(GL_LIGHT0, GL_SPECULAR, light_specular);
-  glLightfv(GL_LIGHT0, GL_POSITION, light_position);
+    glLightfv(GL_LIGHT0, GL_AMBIENT,  light_ambient);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE,  light_diffuse);
+    glLightfv(GL_LIGHT0, GL_SPECULAR, light_specular);
+    glLightfv(GL_LIGHT0, GL_POSITION, light_position);
 
-  glEnable(GL_LIGHTING);
-  glEnable(GL_LIGHT0);
-  glEnable(GL_DEPTH_TEST);
+    glEnable(GL_LIGHTING);
+    glEnable(GL_LIGHT0);
+    glEnable(GL_DEPTH_TEST);
 
-  glColor3f(0.5, 1.0, 0.5);
+    quad = gluNewQuadric();
+    gluQuadricNormals(quad, GLU_SMOOTH);
 
-  quad = gluNewQuadric();
+    printf("=== Cena Bob Esponja ===\n");
+    printf("ESPACO    - liga/desliga danca\n");
+    printf("+/-       - velocidade da danca\n");
+    printf("O         - abre a casa do Patrick\n");
+    printf("F         - fecha a casa do Patrick\n");
+    printf("Seta cima - tela cheia\n");
+    printf("Seta baixo- janela 800x600\n");
 }
 
 void display(void)
 {
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  glMatrixMode(GL_MODELVIEW);
-  glLoadIdentity();
-  gluLookAt(0.0f, 14.0f, 35.0f,  0.0f, 6.0f, 0.0f,  0.0f, 1.0f, 0.0f);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    gluLookAt(0.0f, 12.0f, 38.0f,  0.0f, 5.0f, 0.0f,  0.0f, 1.0f, 0.0f);
 
-  drawGround();
-  drawBuilding(0.0f, 0.0f, -15.0f);
+    drawGround();
+    drawPatrickHouse(0.0f, 0.0f, -14.0f);
 
-  /* Bob Esponja e Patrick dancando "Stayin' Alive" */
-  drawBobEsponja(-5.0f, 0.0f, 5.0f, 0.0f);
-  drawPatrick(5.0f, 0.0f, 5.0f, 180.0f); /* fase oposta -> dança alternada */
+    /* personagens dancando "Stayin' Alive" com fase oposta */
+    drawBobEsponja(-6.5f, 0.0f, 5.5f,   0.0f);
+    drawPatrick(    6.5f, 0.0f, 5.5f, 180.0f);
 
-  glFlush();
+    glFlush();
 }
 
 void reshape(int w, int h)
 {
-  glViewport(0, 0, (GLsizei) w, (GLsizei) h);
-  glMatrixMode(GL_PROJECTION);
-  glLoadIdentity();
-  gluPerspective(45.0, (GLfloat)w / (GLfloat)h, 1.0, 200.0);
+    glViewport(0, 0, (GLsizei)w, (GLsizei)h);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(45.0, (GLdouble)w / (GLdouble)h, 0.5, 200.0);
 }
 
 int main(int argc, char** argv)
 {
-  glutInit(&argc, argv);
-  glutInitDisplayMode(GLUT_SINGLE | GLUT_DEPTH | GLUT_RGB);
-  glutInitWindowSize(800, 600);
-  glutInitWindowPosition(100, 100);
-  win_id = glutCreateWindow(argv[0]);
-  init();
-  glutDisplayFunc(display);
-  glutReshapeFunc(reshape);
-  glutKeyboardFunc(myKeyboard);
-  glutSpecialFunc(myKeyboardSpecial);
-  glutMouseFunc(myMouse);
-  glutTimerFunc(30, myTimer, 0);
-  glutMainLoop();
-  return 0;
+    glutInit(&argc, argv);
+    glutInitDisplayMode(GLUT_SINGLE | GLUT_DEPTH | GLUT_RGB);
+    glutInitWindowSize(800, 600);
+    glutInitWindowPosition(100, 100);
+    win_id = glutCreateWindow("Bob Esponja - Cena OpenGL");
+    init();
+    glutDisplayFunc(display);
+    glutReshapeFunc(reshape);
+    glutKeyboardFunc(myKeyboard);
+    glutSpecialFunc(myKeyboardSpecial);
+    glutMouseFunc(myMouse);
+    glutTimerFunc(30, myTimer, 0);
+    glutMainLoop();
+    return 0;
 }
