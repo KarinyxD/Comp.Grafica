@@ -50,6 +50,19 @@ void drawBox(float sx, float sy, float sz)
     glPopMatrix();
 }
 
+/* disco plano (2D) na face frontal — usado para furos/poros do Bob */
+void drawFlatCircle(float cx, float cy, float cz, float r, int segs)
+{
+    glBegin(GL_TRIANGLE_FAN);
+        glNormal3f(0.0f, 0.0f, 1.0f);
+        glVertex3f(cx, cy, cz);
+        for (int i = 0; i <= segs; i++) {
+            float a = DEG2RAD(360.0f * i / segs);
+            glVertex3f(cx + r * cosf(a), cy + r * sinf(a), cz);
+        }
+    glEnd();
+}
+
 void drawEye(float scale)
 {
     glColor3f(1.0f, 1.0f, 1.0f);
@@ -126,17 +139,19 @@ void drawBobEsponja(float x, float y, float z, float phase)
             drawBox(4.0f, 5.0f, 2.5f);
         glPopMatrix();
 
-        /* furos da esponja */
-        glColor3f(0.88f, 0.72f, 0.05f);
-        float hx[] = {-1.2f, 0.5f, -0.5f, 1.1f, -1.0f, 0.8f};
-        float hy[] = {6.8f,  6.3f, 5.2f,  5.6f, 4.2f, 4.8f};
-        float hr[] = {0.22f, 0.18f, 0.25f, 0.2f, 0.2f, 0.23f};
-        for (int i = 0; i < 6; i++) {
-            glPushMatrix();
-                glTranslatef(hx[i], hy[i], 1.26f);
-                glutSolidSphere(hr[i], 8, 8);
-            glPopMatrix();
-        }
+        /* poros da esponja: circulos planos amarelo-escuro na face frontal */
+        glColor3f(0.80f, 0.65f, 0.03f);
+        static const float hx[] = {-1.4f,  0.8f, -0.3f,  1.5f, -0.9f,  0.2f,
+                                     1.2f, -1.7f,  0.6f, -0.5f,  1.8f, -1.1f,
+                                     0.4f, -1.5f,  0.9f};
+        static const float hy[] = { 6.7f,  6.4f,  6.1f,  5.8f,  5.5f,  5.1f,
+                                     4.7f,  4.5f,  4.2f,  3.9f,  3.6f,  3.3f,
+                                     3.0f,  2.7f,  2.4f};
+        static const float hr[] = {0.18f, 0.22f, 0.15f, 0.20f, 0.25f, 0.18f,
+                                    0.22f, 0.16f, 0.24f, 0.19f, 0.17f, 0.23f,
+                                    0.20f, 0.16f, 0.21f};
+        for (int i = 0; i < 15; i++)
+            drawFlatCircle(hx[i], hy[i], 1.27f, hr[i], 12);
 
         /* olhos */
         glPushMatrix();
@@ -353,57 +368,117 @@ void drawPatrick(float x, float y, float z, float phase)
      *   t=4  162deg braco esquerdo         — longo
      * innerR grande deixa o miolo redondo e gordo.
      */
-    float outerPerTip[5] = {3.2f, 5.2f, 4.9f, 4.9f, 5.2f};
+    /*
+     * t=0  90°  topo/cabeca — alongado para cima
+     * t=1  18°  braco direito
+     * t=2 -54°  perna direita (vai para baixo-direita)
+     * t=3 -126° perna esquerda (vai para baixo-esquerda)
+     * t=4  162° braco esquerdo
+     */
+    float outerPerTip[5] = {5.0f, 5.2f, 4.9f, 4.9f, 5.2f};
     float innerR = 2.8f;
     float arcR   = 0.80f;
     int   arcSteps = 7;
     float depth  = 2.4f;
+    float hz     = depth * 0.5f;   /* z da face frontal do prisma */
 
     float vx[STAR_MAX_V], vy[STAR_MAX_V]; int n;
     buildRoundedStarVar(outerPerTip, innerR, arcR, arcSteps, vx, vy, &n);
 
     glPushMatrix();
         glTranslatef(x, y + bob, z);
-        glRotatef(sway, 0.0f, 0.0f, 1.0f);   /* balanca como "Stayin' Alive" */
+        glRotatef(sway, 0.0f, 0.0f, 1.0f);
         glRotatef(lean, 1.0f, 0.0f, 0.0f);
 
-        /* corpo estrela */
-        glColor3f(1.0f, 0.55f, 0.60f);
-        glPushMatrix();
-            glTranslatef(0.0f, 3.8f, 0.0f);
-            drawStarPrismFromVerts(vx, vy, n, depth);
-        glPopMatrix();
+        /* tudo desenhado no sistema de coordenadas da estrela */
+        glTranslatef(0.0f, 3.8f, 0.0f);
 
-        /* calcinha verde com listras roxas (na barriga do corpo) */
-        float shortZ = depth * 0.5f + 0.05f;  /* frente do prisma */
-        glColor3f(0.15f, 0.55f, 0.2f);
-        glPushMatrix();
-            glTranslatef(0.0f, 3.6f, shortZ);
-            drawBox(2.5f, 1.1f, 0.12f);
-        glPopMatrix();
-        glColor3f(0.55f, 0.1f, 0.7f);
+        /* corpo estrela rosa */
+        glColor3f(1.0f, 0.55f, 0.60f);
+        drawStarPrismFromVerts(vx, vy, n, depth);
+
+        /* ---- bermuda nas pernas (coordenadas locais da estrela) ----
+         * As pernas sao t=2 (-54 deg) e t=3 (-126 deg).
+         * Pontas das pernas em coordenadas locais:
+         *   perna dir:  (4.9*cos(-54), 4.9*sin(-54)) ~ ( 2.88, -3.97)
+         *   perna esq:  (4.9*cos(-126),4.9*sin(-126)) ~ (-2.88, -3.97)
+         * Vertices internos entre as pernas (bottom inner da estrela):
+         *   (innerR*cos(-90), innerR*sin(-90)) = (0, -2.8)
+         * A bermuda cobre do cinto (y~-0.4) ate perto das pontas das pernas.
+         */
+        float fz  = hz + 0.03f;   /* ligeiramente na frente da face do prisma */
+        float fz2 = hz + 0.05f;   /* listras ainda mais na frente */
+
+        /* bermuda verde */
+        glColor3f(0.15f, 0.55f, 0.20f);
+        glNormal3f(0.0f, 0.0f, 1.0f);
+        glBegin(GL_POLYGON);
+            glVertex3f(-2.6f, -0.4f, fz);   /* cinto esquerdo        */
+            glVertex3f( 2.6f, -0.4f, fz);   /* cinto direito         */
+            glVertex3f( 3.5f, -2.4f, fz);   /* lateral dir descendo  */
+            glVertex3f( 3.8f, -4.1f, fz);   /* ponta perna dir outer */
+            glVertex3f( 1.9f, -4.3f, fz);   /* ponta perna dir inner */
+            glVertex3f( 0.3f, -3.1f, fz);   /* crotch direito        */
+            glVertex3f(-0.3f, -3.1f, fz);   /* crotch esquerdo       */
+            glVertex3f(-1.9f, -4.3f, fz);   /* ponta perna esq inner */
+            glVertex3f(-3.8f, -4.1f, fz);   /* ponta perna esq outer */
+            glVertex3f(-3.5f, -2.4f, fz);   /* lateral esq subindo   */
+        glEnd();
+
+        /* listras roxas — acompanham cada perna na direcao da extremidade */
+        glColor3f(0.55f, 0.10f, 0.70f);
+
+        /* cinto: 3 listras horizontais */
         for (int i = -1; i <= 1; i++) {
-            glPushMatrix();
-                glTranslatef(i * 0.75f, 3.6f, shortZ + 0.05f);
-                drawBox(0.18f, 1.15f, 0.08f);
-            glPopMatrix();
+            glBegin(GL_QUADS);
+                glNormal3f(0.0f, 0.0f, 1.0f);
+                glVertex3f(i*0.9f - 0.09f, -0.42f, fz2);
+                glVertex3f(i*0.9f + 0.09f, -0.42f, fz2);
+                glVertex3f(i*0.9f + 0.09f, -1.30f, fz2);
+                glVertex3f(i*0.9f - 0.09f, -1.30f, fz2);
+            glEnd();
         }
 
-        /* olhos na face frontal do miolo */
-        float eyeZ = shortZ + 0.02f;
+        /* listras da perna direita (direcao -54 deg = rot -36 de -Y) */
+        for (int i = 0; i < 3; i++) {
+            float off = -0.5f + i * 0.55f;  /* deslocamento lateral */
+            glBegin(GL_QUADS);
+                glNormal3f(0.0f, 0.0f, 1.0f);
+                /* inicio da listra (na juncao cinto/perna) */
+                glVertex3f(1.4f + off - 0.08f, -1.3f,           fz2);
+                glVertex3f(1.4f + off + 0.08f, -1.3f,           fz2);
+                /* fim da listra (proximo a ponta da perna) */
+                glVertex3f(2.8f + off*0.6f + 0.08f, -3.8f,      fz2);
+                glVertex3f(2.8f + off*0.6f - 0.08f, -3.8f,      fz2);
+            glEnd();
+        }
+
+        /* listras da perna esquerda (simetrica) */
+        for (int i = 0; i < 3; i++) {
+            float off = -0.5f + i * 0.55f;
+            glBegin(GL_QUADS);
+                glNormal3f(0.0f, 0.0f, 1.0f);
+                glVertex3f(-1.4f - off + 0.08f, -1.3f,          fz2);
+                glVertex3f(-1.4f - off - 0.08f, -1.3f,          fz2);
+                glVertex3f(-2.8f - off*0.6f - 0.08f, -3.8f,     fz2);
+                glVertex3f(-2.8f - off*0.6f + 0.08f, -3.8f,     fz2);
+            glEnd();
+        }
+
+        /* olhos e boca no miolo da estrela */
+        float eyeZ = hz + 0.05f;
         glPushMatrix();
-            glTranslatef(-0.78f, 4.55f, eyeZ);
+            glTranslatef(-0.78f, 0.75f, eyeZ);
             drawEye(0.58f);
         glPopMatrix();
         glPushMatrix();
-            glTranslatef(0.78f, 4.55f, eyeZ);
+            glTranslatef(0.78f, 0.75f, eyeZ);
             drawEye(0.58f);
         glPopMatrix();
 
-        /* boca */
         glColor3f(0.0f, 0.0f, 0.0f);
         glPushMatrix();
-            glTranslatef(0.0f, 3.85f, eyeZ + 0.55f);
+            glTranslatef(0.0f, 0.05f, eyeZ + 0.55f);
             drawBox(1.3f, 0.2f, 0.12f);
         glPopMatrix();
 
