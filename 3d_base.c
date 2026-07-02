@@ -254,58 +254,102 @@ void drawBobEsponja(float x, float y, float z, float phase)
    Patrick Estrela
    ===================================================================== */
 
-/* preenche a estrela em z fixo como triangle fan */
-void starFace(float outerR, float innerR, float z, int frontFace)
+/*
+ * buildRoundedStar: gera o poligono da estrela com pontas arredondadas.
+ * Cada uma das 5 pontas aguda e substituida por um arco circular de
+ * arcSteps+1 vertices. O arco e a circunferencia inscrita no angulo da
+ * ponta com raio arcR, sem adicionar nenhum objeto externo.
+ * Retorna os vertices em vx/vy e a contagem em *n.
+ */
+#define STAR_MAX_V 80
+void buildRoundedStar(float outerR, float innerR, float arcR, int arcSteps,
+                      float *vx, float *vy, int *n)
 {
-    float ax[10], ay[10];
-    for (int i = 0; i < 10; i++) {
-        float ang = DEG2RAD(90.0f - i * 36.0f);
-        float r   = (i % 2 == 0) ? outerR : innerR;
-        ax[i] = r * cosf(ang);
-        ay[i] = r * sinf(ang);
+    *n = 0;
+    for (int t = 0; t < 5; t++) {
+        float tipAng  = DEG2RAD(90.0f - t * 72.0f);
+        float tx = outerR * cosf(tipAng);
+        float ty = outerR * sinf(tipAng);
+
+        /* vertices internos adjacentes */
+        float aL = tipAng + DEG2RAD(36.0f);
+        float aR = tipAng - DEG2RAD(36.0f);
+        float lx = innerR * cosf(aL), ly = innerR * sinf(aL);
+        float rx = innerR * cosf(aR), ry = innerR * sinf(aR);
+
+        /* vetores das arestas a partir da ponta, normalizados */
+        float elx = lx-tx, ely = ly-ty, el = sqrtf(elx*elx+ely*ely);
+        float erx = rx-tx, ery = ry-ty, er = sqrtf(erx*erx+ery*ery);
+        elx/=el; ely/=el; erx/=er; ery/=er;
+
+        /* meio-angulo da ponta */
+        float c = fmaxf(-1.0f, fminf(1.0f, elx*erx + ely*ery));
+        float halfTheta = acosf(c) * 0.5f;
+
+        /* centro do arco: recua da ponta ao longo da direcao interna */
+        float offset = arcR / sinf(halfTheta);
+        float cx = tx - offset * cosf(tipAng);
+        float cy = ty - offset * sinf(tipAng);
+
+        /* angulos do arco a partir do centro (simetrico em torno de tipAng) */
+        float arcHalf = (float)PI * 0.5f - halfTheta;
+        float aStart  = tipAng + arcHalf;   /* lado esquerdo da ponta */
+        float aEnd    = tipAng - arcHalf;   /* lado direito da ponta  */
+
+        /* emite vertices do arco em sentido horario (aStart -> aEnd) */
+        for (int j = 0; j <= arcSteps; j++) {
+            float a = aStart + (aEnd - aStart) * (float)j / arcSteps;
+            vx[*n] = cx + arcR * cosf(a);
+            vy[*n] = cy + arcR * sinf(a);
+            (*n)++;
+        }
+
+        /* vertice interno direito (conecta ao proximo trecho) */
+        vx[*n] = rx;
+        vy[*n] = ry;
+        (*n)++;
     }
-    glNormal3f(0.0f, 0.0f, frontFace ? 1.0f : -1.0f);
-    glBegin(GL_TRIANGLE_FAN);
-        glVertex3f(0.0f, 0.0f, z);
-        if (frontFace)
-            for (int i = 0; i <= 10; i++) glVertex3f(ax[i%10], ay[i%10], z);
-        else
-            for (int i = 10; i >= 0; i--) glVertex3f(ax[i%10], ay[i%10], z);
-    glEnd();
 }
 
-void drawStarPrism(float outerR, float innerR, float depth)
+void drawRoundedStarPrism(float outerR, float innerR, float arcR, int arcSteps, float depth)
 {
-    float ax[10], ay[10];
-    for (int i = 0; i < 10; i++) {
-        float ang = DEG2RAD(90.0f - i * 36.0f);
-        float r   = (i % 2 == 0) ? outerR : innerR;
-        ax[i] = r * cosf(ang);
-        ay[i] = r * sinf(ang);
-    }
-    starFace(outerR, innerR,  depth/2.0f, 1);
-    starFace(outerR, innerR, -depth/2.0f, 0);
-    /* laterais */
+    float vx[STAR_MAX_V], vy[STAR_MAX_V];
+    int n;
+    buildRoundedStar(outerR, innerR, arcR, arcSteps, vx, vy, &n);
+
+    float hz = depth * 0.5f;
+
+    /* face frontal */
+    glNormal3f(0.0f, 0.0f, 1.0f);
+    glBegin(GL_TRIANGLE_FAN);
+        glVertex3f(0.0f, 0.0f, hz);
+        for (int i = 0; i < n; i++) glVertex3f(vx[i], vy[i], hz);
+        glVertex3f(vx[0], vy[0], hz);
+    glEnd();
+
+    /* face traseira (winding invertido) */
+    glNormal3f(0.0f, 0.0f, -1.0f);
+    glBegin(GL_TRIANGLE_FAN);
+        glVertex3f(0.0f, 0.0f, -hz);
+        for (int i = n-1; i >= 0; i--) glVertex3f(vx[i], vy[i], -hz);
+        glVertex3f(vx[n-1], vy[n-1], -hz);
+    glEnd();
+
+    /* laterais com normais corretas por segmento */
     glBegin(GL_QUAD_STRIP);
-        for (int i = 0; i <= 10; i++) {
-            int k  = i % 10;
-            int kp = (i+1) % 10;
-            float nx = (ax[k] + ax[kp]) * 0.5f;
-            float ny = (ay[k] + ay[kp]) * 0.5f;
+        for (int i = 0; i <= n; i++) {
+            int  k  = i % n;
+            int  kp = (i + 1) % n;
+            /* normal apontando para fora: media dos dois vertices do segmento */
+            float nx = (vx[k] + vx[kp]) * 0.5f;
+            float ny = (vy[k] + vy[kp]) * 0.5f;
             float len = sqrtf(nx*nx + ny*ny);
             if (len > 0.001f) { nx /= len; ny /= len; }
             glNormal3f(nx, ny, 0.0f);
-            glVertex3f(ax[k], ay[k],  depth/2.0f);
-            glVertex3f(ax[k], ay[k], -depth/2.0f);
+            glVertex3f(vx[k], vy[k],  hz);
+            glVertex3f(vx[k], vy[k], -hz);
         }
     glEnd();
-    /* esferas nos extremos para arredondar as pontas */
-    for (int i = 0; i < 10; i += 2) {
-        glPushMatrix();
-            glTranslatef(ax[i], ay[i], 0.0f);
-            glutSolidSphere(0.85f, 12, 12);
-        glPopMatrix();
-    }
 }
 
 void drawPatrickArm(float side, float phase)
@@ -351,7 +395,7 @@ void drawPatrick(float x, float y, float z, float phase)
         glColor3f(1.0f, 0.55f, 0.6f);
         glPushMatrix();
             glTranslatef(0.0f, 4.2f, 0.0f);
-            drawStarPrism(3.4f, 1.9f, 2.2f);
+            drawRoundedStarPrism(3.4f, 1.9f, 0.6f, 6, 2.2f);
         glPopMatrix();
 
         /* calcinha verde com listras roxas (Patrick usa na barriga) */
