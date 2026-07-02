@@ -8,10 +8,10 @@
 int win_id;
 GLUquadric *quad;
 
-/* ---- danca "Stayin' Alive" ---- */
+/* ---- danca ---- */
 int   animate    = 1;
 float danceAngle = 0.0f;
-float danceSpeed = 4.0f;
+float danceSpeed = 11.0f;
 
 /* ---- casa do Patrick (pedra) ---- */
 float rockAngle   = 0.0f;   /* 0 = fechada, 85 = aberta */
@@ -84,14 +84,14 @@ void drawBobArm(float side, float phase)
 {
     float swing = 40.0f * sinf(DEG2RAD(danceAngle + phase));
     glPushMatrix();
-        glTranslatef(side * 2.1f, 5.9f, 0.0f);
+        glTranslatef(side * 2.1f, 4.8f, 0.0f);
         glRotatef(side * 22.0f, 0.0f, 0.0f, 1.0f);   /* abre para o lado */
         glRotatef(side * swing, 1.0f, 0.0f, 0.0f);    /* balanca frente/tras */
         /* braco fino amarelo */
         glColor3f(1.0f, 0.88f, 0.1f);
-        drawCylinderY(0.22f, 0.18f, -3.8f, 10, 4);
+        drawCylinderY(0.22f, 0.18f, -2.2f, 10, 4);
         /* mao como esfera pequena */
-        glTranslatef(0.0f, -3.8f, 0.0f);
+        glTranslatef(0.0f, -2.2f, 0.0f);
         glutSolidSphere(0.28f, 10, 10);
     glPopMatrix();
 }
@@ -104,8 +104,8 @@ void drawBobLeg(float side, float phase)
         glRotatef(legSwing, 1.0f, 0.0f, 0.0f);
         /* perna fina amarela */
         glColor3f(1.0f, 0.88f, 0.1f);
-        drawCylinderY(0.28f, 0.26f, -2.8f, 10, 4);
-        glTranslatef(0.0f, -2.8f, 0.0f);
+        drawCylinderY(0.28f, 0.26f, -1.8f, 10, 4);
+        glTranslatef(0.0f, -1.8f, 0.0f);
         /* meia branca */
         glColor3f(1.0f, 1.0f, 1.0f);
         drawCylinderY(0.30f, 0.30f, -0.75f, 10, 4);
@@ -137,24 +137,13 @@ void drawBobEsponja(float x, float y, float z, float phase)
     glPushMatrix();
         glTranslatef(x, y + bob, z);
 
-        /* --- corpo amarelo (esponja quadrada) --- */
+        /* --- corpo amarelo  --- */
         glColor3f(1.0f, 0.88f, 0.1f);
         glPushMatrix();
             glTranslatef(0.0f, 4.5f, 0.0f);
             drawBox(4.0f, 5.0f, 2.5f);
         glPopMatrix();
 
-        /* furos da esponja */
-        glColor3f(0.88f, 0.72f, 0.05f);
-        float hx[] = {-1.2f, 0.5f, -0.5f, 1.1f, -1.0f, 0.8f};
-        float hy[] = {6.8f,  6.3f, 5.2f,  5.6f, 4.2f, 4.8f};
-        float hr[] = {0.22f, 0.18f, 0.25f, 0.2f, 0.2f, 0.23f};
-        for (int i = 0; i < 6; i++) {
-            glPushMatrix();
-                glTranslatef(hx[i], hy[i], 1.26f);
-                glutSolidSphere(hr[i], 8, 8);
-            glPopMatrix();
-        }
 
         /* --- olhos --- */
         glPushMatrix();
@@ -166,17 +155,17 @@ void drawBobEsponja(float x, float y, float z, float phase)
             drawEye(0.72f);
         glPopMatrix();
 
-        /* cílios (3 por olho, finos) */
-        glColor3f(0.0f, 0.0f, 0.0f);
+        /* cílios */
+        glColor3f(0.0f, -5.0f, 0.0f);
         float cilX[] = {-1.4f, -0.85f, -0.3f};
         for (int i = 0; i < 3; i++) {
             glPushMatrix();
-                glTranslatef(cilX[i], 6.95f, 1.32f);
+                glTranslatef(cilX[i], 6.65f, 1.32f);
                 glRotatef(-15.0f + i*15.0f, 0.0f, 0.0f, 1.0f);
                 drawCylinderY(0.04f, 0.02f, 0.45f, 6, 2);
             glPopMatrix();
             glPushMatrix();
-                glTranslatef(-cilX[i], 6.95f, 1.32f);
+                glTranslatef(-cilX[i], 6.65f, 1.32f);
                 glRotatef(15.0f - i*15.0f, 0.0f, 0.0f, 1.0f);
                 drawCylinderY(0.04f, 0.02f, 0.45f, 6, 2);
             glPopMatrix();
@@ -209,11 +198,11 @@ void drawBobEsponja(float x, float y, float z, float phase)
         /* --- gravata vermelha --- */
         glColor3f(0.85f, 0.05f, 0.05f);
         glPushMatrix();
-            glTranslatef(0.0f, 5.5f, 1.28f);
+            glTranslatef(0.0f, 2.0f, 1.28f);
             glRotatef(5.0f, 0.0f, 0.0f, 1.0f);
             drawBox(0.3f, 1.2f, 0.1f);
             /* ponta da gravata */
-            glTranslatef(0.05f, -0.85f, 0.0f);
+            glTranslatef(0.05f, -0.50f, 0.3f);
             glBegin(GL_TRIANGLES);
                 glNormal3f(0,0,1);
                 glVertex3f(-0.25f, 0.0f, 0.0f);
@@ -352,37 +341,6 @@ void drawRoundedStarPrism(float outerR, float innerR, float arcR, int arcSteps, 
     glEnd();
 }
 
-void drawPatrickArm(float side, float phase)
-{
-    float swing = 40.0f * sinf(DEG2RAD(danceAngle + phase));
-    glPushMatrix();
-        glTranslatef(side * 3.1f, 4.4f, 0.0f);
-        glRotatef(side * 30.0f, 0.0f, 0.0f, 1.0f);
-        glRotatef(side * swing, 1.0f, 0.0f, 0.0f);
-        glColor3f(1.0f, 0.55f, 0.6f);
-        drawCylinderY(0.35f, 0.28f, -2.8f, 10, 4);
-        glTranslatef(0.0f, -2.8f, 0.0f);
-        glutSolidSphere(0.35f, 10, 10);
-    glPopMatrix();
-}
-
-void drawPatrickLeg(float side, float phase)
-{
-    float legSwing = side * 22.0f * sinf(DEG2RAD(danceAngle + phase));
-    glPushMatrix();
-        glTranslatef(side * 1.3f, 1.5f, 0.0f);
-        glRotatef(legSwing, 1.0f, 0.0f, 0.0f);
-        glColor3f(1.0f, 0.55f, 0.6f);
-        drawCylinderY(0.38f, 0.35f, -2.0f, 10, 4);
-        glTranslatef(0.0f, -2.0f, 0.0f);
-        glColor3f(0.05f, 0.05f, 0.05f);
-        glPushMatrix();
-            glTranslatef(0.0f, -0.25f, 0.4f);
-            glScalef(1.3f, 0.5f, 1.9f);
-            glutSolidSphere(0.65f, 12, 8);
-        glPopMatrix();
-    glPopMatrix();
-}
 
 void drawPatrick(float x, float y, float z, float phase)
 {
@@ -428,12 +386,6 @@ void drawPatrick(float x, float y, float z, float phase)
             glTranslatef(0.0f, 3.85f, 1.12f);
             drawBox(1.3f, 0.2f, 0.12f);
         glPopMatrix();
-
-        /* bracos e pernas */
-        drawPatrickArm(-1.0f, phase);
-        drawPatrickArm( 1.0f, phase + 180.0f);
-        drawPatrickLeg(-1.0f, phase);
-        drawPatrickLeg( 1.0f, phase + 180.0f);
 
     glPopMatrix();
 }
@@ -677,11 +629,11 @@ void display(void)
     gluLookAt(0.0f, 12.0f, 38.0f,  0.0f, 5.0f, 0.0f,  0.0f, 1.0f, 0.0f);
 
     drawGround();
-    drawPatrickHouse(0.0f, 0.0f, -14.0f);
+    drawPatrickHouse(0.0f, 3.0f, -14.0f);
 
     /* personagens dancando "Stayin' Alive" com fase oposta */
-    drawBobEsponja(-6.5f, 0.0f, 5.5f,   0.0f);
-    drawPatrick(    6.5f, 0.0f, 5.5f, 180.0f);
+    drawBobEsponja(-6.5f, 2.3f, 5.5f,   0.0f);
+    drawPatrick(    6.5f, 2.3f, 5.5f, 180.0f);
 
     glFlush();
 }
