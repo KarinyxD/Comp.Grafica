@@ -359,22 +359,6 @@ void drawPatrick(float x, float y, float z, float phase)
     float sway = 22.0f * sinf(DEG2RAD(danceAngle + phase));       /* balanco lateral */
     float lean = 10.0f * sinf(DEG2RAD(danceAngle + phase + 90.f)); /* inclinacao frente/tras */
 
-    /*
-     * Pontas da estrela como membros (sentido horario a partir do topo):
-     *   t=0  90deg  topo (cabeca/gorducho) — curto
-     *   t=1  18deg  braco direito          — longo
-     *   t=2 -54deg  perna direita          — longo
-     *   t=3 -126deg perna esquerda         — longo
-     *   t=4  162deg braco esquerdo         — longo
-     * innerR grande deixa o miolo redondo e gordo.
-     */
-    /*
-     * t=0  90°  topo/cabeca — alongado para cima
-     * t=1  18°  braco direito
-     * t=2 -54°  perna direita (vai para baixo-direita)
-     * t=3 -126° perna esquerda (vai para baixo-esquerda)
-     * t=4  162° braco esquerdo
-     */
     float outerPerTip[5] = {5.0f, 5.2f, 4.9f, 4.9f, 5.2f};
     float innerR = 2.8f;
     float arcR   = 0.80f;
@@ -386,7 +370,8 @@ void drawPatrick(float x, float y, float z, float phase)
     buildRoundedStarVar(outerPerTip, innerR, arcR, arcSteps, vx, vy, &n);
 
     glPushMatrix();
-        glTranslatef(x, y + bob, z);
+        glTranslatef(x, y, z);
+        glScalef(1.0f, 1.15f, 1.0f);
         glRotatef(sway, 0.0f, 0.0f, 1.0f);
         glRotatef(lean, 1.0f, 0.0f, 0.0f);
 
@@ -396,74 +381,6 @@ void drawPatrick(float x, float y, float z, float phase)
         /* corpo estrela rosa */
         glColor3f(1.0f, 0.55f, 0.60f);
         drawStarPrismFromVerts(vx, vy, n, depth);
-
-        /* ---- bermuda nas pernas (coordenadas locais da estrela) ----
-         * As pernas sao t=2 (-54 deg) e t=3 (-126 deg).
-         * Pontas das pernas em coordenadas locais:
-         *   perna dir:  (4.9*cos(-54), 4.9*sin(-54)) ~ ( 2.88, -3.97)
-         *   perna esq:  (4.9*cos(-126),4.9*sin(-126)) ~ (-2.88, -3.97)
-         * Vertices internos entre as pernas (bottom inner da estrela):
-         *   (innerR*cos(-90), innerR*sin(-90)) = (0, -2.8)
-         * A bermuda cobre do cinto (y~-0.4) ate perto das pontas das pernas.
-         */
-        float fz  = hz + 0.03f;   /* ligeiramente na frente da face do prisma */
-        float fz2 = hz + 0.05f;   /* listras ainda mais na frente */
-
-        /* bermuda verde */
-        glColor3f(0.15f, 0.55f, 0.20f);
-        glNormal3f(0.0f, 0.0f, 1.0f);
-        glBegin(GL_POLYGON);
-            glVertex3f(-2.6f, -0.4f, fz);   /* cinto esquerdo        */
-            glVertex3f( 2.6f, -0.4f, fz);   /* cinto direito         */
-            glVertex3f( 3.5f, -2.4f, fz);   /* lateral dir descendo  */
-            glVertex3f( 3.8f, -4.1f, fz);   /* ponta perna dir outer */
-            glVertex3f( 1.9f, -4.3f, fz);   /* ponta perna dir inner */
-            glVertex3f( 0.3f, -3.1f, fz);   /* crotch direito        */
-            glVertex3f(-0.3f, -3.1f, fz);   /* crotch esquerdo       */
-            glVertex3f(-1.9f, -4.3f, fz);   /* ponta perna esq inner */
-            glVertex3f(-3.8f, -4.1f, fz);   /* ponta perna esq outer */
-            glVertex3f(-3.5f, -2.4f, fz);   /* lateral esq subindo   */
-        glEnd();
-
-        /* listras roxas — acompanham cada perna na direcao da extremidade */
-        glColor3f(0.55f, 0.10f, 0.70f);
-
-        /* cinto: 3 listras horizontais */
-        for (int i = -1; i <= 1; i++) {
-            glBegin(GL_QUADS);
-                glNormal3f(0.0f, 0.0f, 1.0f);
-                glVertex3f(i*0.9f - 0.09f, -0.42f, fz2);
-                glVertex3f(i*0.9f + 0.09f, -0.42f, fz2);
-                glVertex3f(i*0.9f + 0.09f, -1.30f, fz2);
-                glVertex3f(i*0.9f - 0.09f, -1.30f, fz2);
-            glEnd();
-        }
-
-        /* listras da perna direita (direcao -54 deg = rot -36 de -Y) */
-        for (int i = 0; i < 3; i++) {
-            float off = -0.5f + i * 0.55f;  /* deslocamento lateral */
-            glBegin(GL_QUADS);
-                glNormal3f(0.0f, 0.0f, 1.0f);
-                /* inicio da listra (na juncao cinto/perna) */
-                glVertex3f(1.4f + off - 0.08f, -1.3f,           fz2);
-                glVertex3f(1.4f + off + 0.08f, -1.3f,           fz2);
-                /* fim da listra (proximo a ponta da perna) */
-                glVertex3f(2.8f + off*0.6f + 0.08f, -3.8f,      fz2);
-                glVertex3f(2.8f + off*0.6f - 0.08f, -3.8f,      fz2);
-            glEnd();
-        }
-
-        /* listras da perna esquerda (simetrica) */
-        for (int i = 0; i < 3; i++) {
-            float off = -0.5f + i * 0.55f;
-            glBegin(GL_QUADS);
-                glNormal3f(0.0f, 0.0f, 1.0f);
-                glVertex3f(-1.4f - off + 0.08f, -1.3f,          fz2);
-                glVertex3f(-1.4f - off - 0.08f, -1.3f,          fz2);
-                glVertex3f(-2.8f - off*0.6f - 0.08f, -3.8f,     fz2);
-                glVertex3f(-2.8f - off*0.6f + 0.08f, -3.8f,     fz2);
-            glEnd();
-        }
 
         /* olhos e boca no miolo da estrela */
         float eyeZ = hz + 0.05f;
@@ -622,7 +539,7 @@ void drawBackground(void)
        gastar ali a transicao de cor. Ajuste este valor para casar com a
        posicao real do horizonte: 0.0 = meio da tela; negativo desce o
        ponto onde o azul claro "termina". */
-    float horizonY = 0.15f;
+    float horizonY = 0.35f;
 
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
@@ -869,7 +786,7 @@ void display(void)
     drawGround();
     drawPatrickHouse(0.0f, 3.0f, -14.0f);
     drawBobEsponja(-6.5f, 2.3f, 5.5f,   0.0f);
-    drawPatrick(    6.5f, 2.3f, 5.5f, 180.0f);
+    drawPatrick(    6.5f, 1.0f, 5.5f, 180.0f);
 
     glFlush();
 }
