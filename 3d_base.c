@@ -575,12 +575,54 @@ void drawPatrickHouse(float x, float y, float z)
    Cenario
    ===================================================================== */
 
+/*
+ * drawSkyStar: desenha a "florzinha" decorativa do fundo do Bob Esponja.
+ * E uma curva polar em forma de rosa (r = R*|cos(k*theta)|), que gera
+ * petalas arredondadas com a base afinada perto do centro — exatamente
+ * o desenho ondulado usado no cenario original. Apenas o contorno e
+ * tracado (GL_LINE_LOOP), entao o interior fica transparente, deixando
+ * o degrade do ceu aparecer atraves da estrela. Um pequeno circulo
+ * marca o miolo, como na referencia.
+ */
+void drawSkyStar(float cx, float cy, float size, float cr, float cg, float cb,
+                  int lobes, float phase)
+{
+    int segs = 90;
+    glColor3f(cr, cg, cb);
+    glLineWidth(2.0f);
+    glBegin(GL_LINE_LOOP);
+        for (int i = 0; i < segs; i++) {
+            float a = 2.0f * PI * (float)i / segs;
+            float k = lobes * 0.5f;
+            float radius = size * powf(fabsf(cosf(k * a + phase)), 0.72f);
+            glVertex2f(cx + radius * cosf(a), cy + radius * sinf(a));
+        }
+    glEnd();
+
+    /* miolo (pequeno circulo no centro da flor) */
+    glBegin(GL_LINE_LOOP);
+        for (int i = 0; i < 14; i++) {
+            float a = 2.0f * PI * (float)i / 14;
+            glVertex2f(cx + size * 0.09f * cosf(a), cy + size * 0.09f * sinf(a));
+        }
+    glEnd();
+
+    glLineWidth(1.0f);
+}
+
 /* Fundo degradê: azul claro (#5AAAFA) embaixo -> azul escuro (#166ABE) em cima.
    Desenhado como quad ortografico ANTES de qualquer objeto 3D. */
 void drawBackground(void)
 {
     glDisable(GL_LIGHTING);
     glDisable(GL_DEPTH_TEST);
+
+    /* altura (em coordenadas -1..1) onde fica o horizonte na tela.
+       Abaixo dela a areia sempre cobre o degrade, entao nao faz sentido
+       gastar ali a transicao de cor. Ajuste este valor para casar com a
+       posicao real do horizonte: 0.0 = meio da tela; negativo desce o
+       ponto onde o azul claro "termina". */
+    float horizonY = 0.15f;
 
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
@@ -590,15 +632,56 @@ void drawBackground(void)
         glPushMatrix();
             glLoadIdentity();
             glBegin(GL_QUADS);
-                /* topo: #166ABE */
+                /* topo da tela: #166ABE */
                 glColor3f(0.086f, 0.416f, 0.745f);
                 glVertex2f(-1.0f,  1.0f);
                 glVertex2f( 1.0f,  1.0f);
-                /* base: #5AAAFA */
+                /* horizonte: #5AAAFA — a partir daqui a areia ja cobre tudo */
                 glColor3f(0.353f, 0.667f, 0.980f);
+                glVertex2f( 1.0f, horizonY);
+                glVertex2f(-1.0f, horizonY);
+            glEnd();
+            /* abaixo do horizonte: preenche com a mesma cor clara, so por
+               garantia caso a areia nao cubra 100% em algum angulo */
+            glBegin(GL_QUADS);
+                glColor3f(0.353f, 0.667f, 0.980f);
+                glVertex2f(-1.0f, horizonY);
+                glVertex2f( 1.0f, horizonY);
                 glVertex2f( 1.0f, -1.0f);
                 glVertex2f(-1.0f, -1.0f);
             glEnd();
+
+            /* estrelas/florzinhas decorativas do ceu — contorno colorido,
+               interior transparente. Posicionadas so na faixa acima do
+               horizonte (ceu), nunca sobre a areia. Cores: roxo, branco,
+               amarelo pastel, azul pastel e lilas, como na referencia. */
+            {
+                #define N_SKY_STARS 9
+                static const float sx[N_SKY_STARS]     = {-0.85f, -0.35f,  0.15f,  0.68f,  0.92f, -0.62f,  0.40f, -0.10f,  0.78f};
+                static const float sy[N_SKY_STARS]     = { 0.85f,  0.55f,  0.90f,  0.75f,  0.35f,  0.30f,  0.20f,  0.65f,  0.92f};
+                static const float ssize[N_SKY_STARS]  = { 0.10f,  0.16f,  0.09f,  0.07f,  0.11f,  0.08f,  0.13f,  0.06f,  0.10f};
+                static const int   slobes[N_SKY_STARS] = { 5, 6, 5, 6, 5, 6, 5, 6, 5 };
+                static const float sphase[N_SKY_STARS] = { 0.3f, 0.9f, 0.1f, 1.2f, 0.6f, 0.0f, 1.5f, 0.4f, 1.0f };
+                /* paleta: roxo, branco, amarelo pastel, azul pastel, lilas */
+                static const float scolor[N_SKY_STARS][3] = {
+                    {0.62f, 0.20f, 0.62f}, /* roxo   */
+                    {1.00f, 1.00f, 1.00f}, /* branco */
+                    {0.98f, 0.92f, 0.55f}, /* amarelo pastel */
+                    {0.70f, 0.88f, 0.98f}, /* azul pastel    */
+                    {0.80f, 0.68f, 0.92f}, /* lilas  */
+                    {0.62f, 0.20f, 0.62f},
+                    {1.00f, 1.00f, 1.00f},
+                    {0.70f, 0.88f, 0.98f},
+                    {0.80f, 0.68f, 0.92f}
+                };
+                for (int i = 0; i < N_SKY_STARS; i++) {
+                    if (sy[i] <= horizonY) continue; /* nunca desenha sobre a areia */
+                    drawSkyStar(sx[i], sy[i], ssize[i],
+                                scolor[i][0], scolor[i][1], scolor[i][2],
+                                slobes[i], sphase[i]);
+                }
+                #undef N_SKY_STARS
+            }
         glPopMatrix();
         glMatrixMode(GL_PROJECTION);
     glPopMatrix();
